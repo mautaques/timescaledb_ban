@@ -1,3 +1,7 @@
+/* Script utilizado na geração e consulta de 
+   dados do seminário da disciplina BAN2002
+*/
+
 -- Criação da tabela "leitura_temperatura"
 
 CREATE TABLE leitura_temperatura (
@@ -11,10 +15,7 @@ CREATE TABLE leitura_temperatura (
 	no argumento "by_range('tempo', INTERVAL '1 day')"
 */
 
-SELECT create_hypertable(
-	'leitura_temperatura',
-	by_range('tempo', INTERVAL '1 day')
-);
+SELECT create_hypertable('leitura_temperatura', by_range('tempo', INTERVAL '1 day'));
 
 /* Inserção dos Dados na Tabela
 	a fórmula de inserção da temperatura faz com que todos os dados sejam mais fiéis
@@ -90,10 +91,53 @@ SELECT
 FROM leitura_temperatura
 GROUP BY hora, dispositivo;
 
+-- Consulta a visão ordenada pela hora e por dispositivos
+
 select * from media_horaria
 order by hora, dispositivo;
 
-DROP MATERIALIZED VIEW media_horaria;
+/* função "refresh policy" do timescaleDB que tem como função
+   atualizar automaticamente a visão materializada assim que
+   ocorrer mudanças no banco de dados 
+*/
 
+SELECT add_continuous_aggregate_policy('media_horaria',
+	start_offset => INTERVAL '3 hours',
+	end_offset => INTERVAL '1 hour',
+	schedule_interval => INTERVAL '1 hour'
+);
 
+/* Comprime a tabela somente onde a data é mais antiga do que
+	os últimos sete dias
+*/
+
+SELECT compress_chunk(c)
+FROM show_chunks('leitura_temperatura', 
+	older_than => INTERVAL '7 days') AS c;
+
+/* Mostra uma tabela comparativa com o tamanho da tabela (apenas
+	mais antigas que sete dias) antes da compactação e depois
+*/
+
+SELECT
+	pg_size_pretty(before_compression_total_bytes) AS antes,
+	pg_size_pretty(after_compression_total_bytes) AS depois
+FROM hypertable_compression_stats('leitura_temperatura');
+
+/* Mostra uma tabela comparativa com o tamanho da tabela inteira
+	antes e depois da compactação
+*/
+
+SELECT
+    pg_size_pretty(
+        COALESCE((SELECT sum(before_compression_total_bytes)
+                  FROM hypertable_compression_stats('leitura_temperatura')), 0)
+        +
+        COALESCE((SELECT sum(c.total_bytes)
+                  FROM chunks_detailed_size('leitura_temperatura') c
+                  JOIN timescaledb_information.chunks ic
+                    ON ic.chunk_name = c.chunk_name
+                  WHERE ic.is_compressed = false), 0)
+    ) AS total_antes,
+    pg_size_pretty(hypertable_size('leitura_temperatura')) AS total_depois;
 
