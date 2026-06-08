@@ -10,12 +10,18 @@ CREATE TABLE leitura_temperatura (
 	temperatura DOUBLE PRECISION
 );
 
+DROP TABLE leitura_temperatura CASCADE;
+
 /* Transforma a tabela comum "leitura_temperatura" em uma
 	hypertable, organizada por chunks de 1 dia, evidenciado
 	no argumento "by_range('tempo', INTERVAL '1 day')"
 */
 
 SELECT create_hypertable('leitura_temperatura', by_range('tempo', INTERVAL '1 day'));
+
+-- Informações sobre a hypertable;
+
+SELECT * FROM timescaledb_information.hypertables;
 
 /* Inserção dos Dados na Tabela
 	a fórmula de inserção da temperatura faz com que todos os dados sejam mais fiéis
@@ -107,6 +113,12 @@ SELECT add_continuous_aggregate_policy('media_horaria',
 	schedule_interval => INTERVAL '1 hour'
 );
 
+-- Habilitar a compressão
+
+ALTER TABLE leitura_temperatura SET (
+    timescaledb.compress
+);
+
 /* Comprime a tabela somente onde a data é mais antiga do que
 	os últimos sete dias
 */
@@ -140,4 +152,3 @@ SELECT
                   WHERE ic.is_compressed = false), 0)
     ) AS total_antes,
     pg_size_pretty(hypertable_size('leitura_temperatura')) AS total_depois;
-
