@@ -2,6 +2,8 @@
    dados do seminário da disciplina BAN2002
 */
 
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+
 -- Criação da tabela "leitura_temperatura"
 
 CREATE TABLE leitura_temperatura (
